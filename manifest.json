@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Cookie Keeper",
+  "version": "1.0.0",
+  "description": "自动定期访问配置的网站，获取并保存最新 Cookie，供 yt-dlp 等工具使用",
+  "permissions": ["cookies", "tabs", "alarms", "downloads", "storage"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Cookie Keeper",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
