@@ -227,27 +227,48 @@ function notifyPopup(message) {
   });
 }
 
-// ─── Auto-export ──────────────────────────────────────────────────────────────
+// ─── Auto-export (via Offscreen Document) ────────────────────────────────────
+//
+// Background service workers cannot call URL.createObjectURL().
+// We delegate the actual download to an offscreen document which CAN create
+// Blob URLs, making chrome.downloads.download respect filename + subdirectory.
 
-/**
- * Called from service worker context after task succeeds.
- * Uses a data URL (no createObjectURL in SW) + conflictAction:'overwrite'
- * so the file is silently replaced each run.
- */
+const OFFSCREEN_URL = chrome.runtime.getURL('offscreen.html');
+
+async function ensureOffscreen() {
+  const existing = await chrome.runtime.getContexts({
+    contextTypes: ['OFFSCREEN_DOCUMENT'],
+    documentUrls: [OFFSCREEN_URL],
+  });
+
+  if (existing.length === 0) {
+    await chrome.offscreen.createDocument({
+      url: 'offscreen.html',
+      reasons: ['BLOBS'],
+      justification: 'Create Blob URLs for automatic cookie file downloads',
+    });
+  }
+}
+
 async function autoExportCookies(task, cookies, baseDir = 'CookieKeeper') {
   try {
     const content  = buildNetscapeContent(cookies, task.url);
-    const dataUrl  = `data:text/plain;charset=utf-8,${encodeURIComponent(content)}`;
     const filename = `${baseDir}/${task.saveFilename}`;
 
-    await chrome.downloads.download({
-      url: dataUrl,
+    await ensureOffscreen();
+
+    const response = await chrome.runtime.sendMessage({
+      target:   'offscreen',
+      type:     'DOWNLOAD_FILE',
+      content,
       filename,
-      saveAs: false,
-      conflictAction: 'overwrite',
     });
 
-    console.log(`[CookieKeeper] Auto-saved → Downloads / ${filename}`);
+    if (response?.success) {
+      console.log(`[CookieKeeper] Auto-saved → Downloads / ${filename}`);
+    } else {
+      console.error('[CookieKeeper] Auto-export error:', response?.error);
+    }
   } catch (err) {
     console.error('[CookieKeeper] Auto-export failed:', err.message);
   }

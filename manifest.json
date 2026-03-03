@@ -3,7 +3,7 @@
   "name": "Cookie Keeper",
   "version": "1.0.0",
   "description": "自动定期访问配置的网站，获取并保存最新 Cookie，供 yt-dlp 等工具使用",
-  "permissions": ["cookies", "tabs", "alarms", "downloads", "storage"],
+  "permissions": ["cookies", "tabs", "alarms", "downloads", "storage", "offscreen"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"
