@@ -139,6 +139,20 @@ function setupListeners() {
   document.getElementById('cancelBtn').addEventListener('click', closeModal);
   document.getElementById('saveBtn').addEventListener('click', saveTask);
 
+  // Auto-save toggle → show/hide filename field
+  document.getElementById('inputAutoSave').addEventListener('change', syncFilenameGroup);
+
+  // When URL changes and filename is empty, auto-fill filename
+  document.getElementById('inputUrl').addEventListener('blur', () => {
+    const fn = document.getElementById('inputFilename');
+    const url = document.getElementById('inputUrl').value.trim();
+    if (!fn.value && url) {
+      try {
+        fn.value = new URL(url).hostname.replace(/\./g, '_') + '_cookies.txt';
+      } catch {}
+    }
+  });
+
   // Click outside modal to close
   document.getElementById('modalOverlay').addEventListener('click', (e) => {
     if (e.target === e.currentTarget) closeModal();
@@ -157,6 +171,9 @@ function openAddModal() {
   document.getElementById('inputInterval').value = '1';
   document.getElementById('inputUnit').value = '60';
   document.getElementById('inputNote').value = '';
+  document.getElementById('inputAutoSave').checked = false;
+  document.getElementById('inputFilename').value = '';
+  syncFilenameGroup();
   clearFormErrors();
   document.getElementById('modalOverlay').classList.add('active');
   setTimeout(() => document.getElementById('inputUrl').focus(), 50);
@@ -170,6 +187,9 @@ function openEditModal(id) {
   document.getElementById('modalTitle').textContent = '编辑网站';
   document.getElementById('inputUrl').value = task.url;
   document.getElementById('inputNote').value = task.note || '';
+  document.getElementById('inputAutoSave').checked = !!task.autoSave;
+  document.getElementById('inputFilename').value = task.saveFilename || '';
+  syncFilenameGroup();
 
   // Reverse-convert minutes → display value + unit
   if (task.intervalMinutes % 1440 === 0) {
@@ -193,6 +213,11 @@ function closeModal() {
   editingTaskId = null;
 }
 
+function syncFilenameGroup() {
+  const on = document.getElementById('inputAutoSave').checked;
+  document.getElementById('filenameGroup').classList.toggle('hidden', !on);
+}
+
 function clearFormErrors() {
   document.getElementById('urlError').textContent = '';
   document.getElementById('inputUrl').classList.remove('invalid');
@@ -208,8 +233,10 @@ async function saveTask() {
   const unitSelect    = document.getElementById('inputUnit');
   const noteInput     = document.getElementById('inputNote');
 
-  const url  = urlInput.value.trim();
-  const note = noteInput.value.trim();
+  const url      = urlInput.value.trim();
+  const note     = noteInput.value.trim();
+  const autoSave = document.getElementById('inputAutoSave').checked;
+  const rawFilename = document.getElementById('inputFilename').value.trim();
   const num  = parseFloat(intervalInput.value);
   const mult = parseInt(unitSelect.value, 10);
 
@@ -234,10 +261,15 @@ async function saveTask() {
 
   const intervalMinutes = Math.max(1, Math.round(num * mult));
 
+  // Derive a safe default filename from domain if user left it blank
+  const saveFilename = autoSave
+    ? (rawFilename || `${getDomain(url).replace(/\./g, '_')}_cookies.txt`)
+    : '';
+
   if (editingTaskId) {
     const idx = tasks.findIndex((t) => t.id === editingTaskId);
     if (idx !== -1) {
-      tasks[idx] = { ...tasks[idx], url, intervalMinutes, note };
+      tasks[idx] = { ...tasks[idx], url, intervalMinutes, note, autoSave, saveFilename };
     }
   } else {
     tasks.push({
@@ -245,6 +277,8 @@ async function saveTask() {
       url,
       intervalMinutes,
       note,
+      autoSave,
+      saveFilename,
       enabled: true,
       lastRun: null,
       lastStatus: null,

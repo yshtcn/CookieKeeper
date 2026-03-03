@@ -74,6 +74,24 @@
                placeholder="例如：YouTube 账号">
       </div>
 
+      <div class="form-group">
+        <label class="form-label">自动保存 Cookie 文件</label>
+        <div class="autosave-row">
+          <label class="toggle">
+            <input type="checkbox" id="inputAutoSave">
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="autosave-hint">运行后自动写入固定文件</span>
+        </div>
+      </div>
+
+      <div class="form-group hidden" id="filenameGroup">
+        <label class="form-label">保存文件名</label>
+        <input type="text" class="form-input" id="inputFilename"
+               placeholder="youtube_com_cookies.txt">
+        <div class="form-tip">存至：下载目录 / CookieKeeper / 文件名（自动覆盖）</div>
+      </div>
+
       <div class="form-actions">
         <button class="btn-cancel" id="cancelBtn">取消</button>
         <button class="btn-save" id="saveBtn">保存</button>
