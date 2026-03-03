@@ -45,6 +45,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'SETTINGS_UPDATED') {
+    // Nothing extra needed; settings are read from storage on each task run
+    sendResponse({ success: true });
+    return true;
+  }
+
   if (message.type === 'RUN_ALL_NOW') {
     chrome.storage.local.get('tasks').then(({ tasks = [] }) => {
       tasks.filter((t) => t.enabled).forEach((t) => executeTask(t.id));
@@ -143,9 +149,11 @@ async function executeTask(taskId) {
 
     console.log(`[CookieKeeper] Task done: ${cookies.length} cookies captured`);
 
-    // Auto-export if configured
+    // Auto-export if configured (read baseDir from settings)
     if (task.autoSave && task.saveFilename && cookies.length > 0) {
-      await autoExportCookies(task, cookies);
+      const { settings = {} } = await chrome.storage.local.get('settings');
+      const baseDir = settings.baseDir || 'CookieKeeper';
+      await autoExportCookies(task, cookies, baseDir);
     }
 
     notifyPopup({ type: 'TASK_COMPLETED', taskId, success: true, cookieCount: cookies.length });
@@ -226,11 +234,11 @@ function notifyPopup(message) {
  * Uses a data URL (no createObjectURL in SW) + conflictAction:'overwrite'
  * so the file is silently replaced each run.
  */
-async function autoExportCookies(task, cookies) {
+async function autoExportCookies(task, cookies, baseDir = 'CookieKeeper') {
   try {
-    const content = buildNetscapeContent(cookies, task.url);
+    const content  = buildNetscapeContent(cookies, task.url);
     const dataUrl  = `data:text/plain;charset=utf-8,${encodeURIComponent(content)}`;
-    const filename = `CookieKeeper/${task.saveFilename}`;
+    const filename = `${baseDir}/${task.saveFilename}`;
 
     await chrome.downloads.download({
       url: dataUrl,
@@ -239,7 +247,7 @@ async function autoExportCookies(task, cookies) {
       conflictAction: 'overwrite',
     });
 
-    console.log(`[CookieKeeper] Auto-saved → Downloads/${filename}`);
+    console.log(`[CookieKeeper] Auto-saved → Downloads / ${filename}`);
   } catch (err) {
     console.error('[CookieKeeper] Auto-export failed:', err.message);
   }
