@@ -227,48 +227,49 @@ function notifyPopup(message) {
   });
 }
 
-// ─── Auto-export (via Offscreen Document) ────────────────────────────────────
+// ─── Auto-export ─────────────────────────────────────────────────────────────
 //
-// Background service workers cannot call URL.createObjectURL().
-// We delegate the actual download to an offscreen document which CAN create
-// Blob URLs, making chrome.downloads.download respect filename + subdirectory.
+// chrome.downloads.download() from a service worker with a data: URL ignores
+// the `filename` parameter (Chrome bug — uses locale default "下载.txt").
+//
+// Fix: use chrome.downloads.onDeterminingFilename to intercept the download
+// event and inject the correct path + filename before Chrome finalizes it.
+// This fires asynchronously after the download is registered, so we store the
+// intended filename in a Map keyed by download ID and look it up in the listener.
 
-const OFFSCREEN_URL = chrome.runtime.getURL('offscreen.html');
+/** downloadId → intended relative path (e.g. "CookieKeeper/site_cookies.txt") */
+const filenameOverrides = new Map();
 
-async function ensureOffscreen() {
-  const existing = await chrome.runtime.getContexts({
-    contextTypes: ['OFFSCREEN_DOCUMENT'],
-    documentUrls: [OFFSCREEN_URL],
-  });
+chrome.downloads.onDeterminingFilename.addListener((downloadItem, suggest) => {
+  if (!filenameOverrides.has(downloadItem.id)) return;
 
-  if (existing.length === 0) {
-    await chrome.offscreen.createDocument({
-      url: 'offscreen.html',
-      reasons: ['BLOBS'],
-      justification: 'Create Blob URLs for automatic cookie file downloads',
-    });
-  }
-}
+  const filename = filenameOverrides.get(downloadItem.id);
+  filenameOverrides.delete(downloadItem.id);
+
+  suggest({ filename, conflictAction: 'overwrite' });
+});
 
 async function autoExportCookies(task, cookies, baseDir = 'CookieKeeper') {
   try {
-    const content  = buildNetscapeContent(cookies, task.url);
-    const filename = `${baseDir}/${task.saveFilename}`;
+    const content        = buildNetscapeContent(cookies, task.url);
+    const targetFilename = `${baseDir}/${task.saveFilename}`;
+    const dataUrl        = `data:text/plain;charset=utf-8,${encodeURIComponent(content)}`;
 
-    await ensureOffscreen();
-
-    const response = await chrome.runtime.sendMessage({
-      target:   'offscreen',
-      type:     'DOWNLOAD_FILE',
-      content,
-      filename,
+    // Start the download (Chrome picks a temp name here; we override it below)
+    const downloadId = await new Promise((resolve, reject) => {
+      chrome.downloads.download({ url: dataUrl, saveAs: false }, (id) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+        } else {
+          resolve(id);
+        }
+      });
     });
 
-    if (response?.success) {
-      console.log(`[CookieKeeper] Auto-saved → Downloads / ${filename}`);
-    } else {
-      console.error('[CookieKeeper] Auto-export error:', response?.error);
-    }
+    // Register override — onDeterminingFilename fires shortly after, in a
+    // later event-loop tick, so this Set always executes before the listener.
+    filenameOverrides.set(downloadId, targetFilename);
+    console.log(`[CookieKeeper] Auto-save started → Downloads/${targetFilename} (id=${downloadId})`);
   } catch (err) {
     console.error('[CookieKeeper] Auto-export failed:', err.message);
   }
